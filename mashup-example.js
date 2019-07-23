@@ -25,9 +25,5 @@ require( ["js/qlik"], function ( qlik ) {
 		$( '#popup' ).hide();
 	} );
 
-	//callbacks -- inserted here --
-	//open apps -- inserted here --
-	//get objects -- inserted here --
-	//create cubes and lists -- inserted here --
 
 } );
