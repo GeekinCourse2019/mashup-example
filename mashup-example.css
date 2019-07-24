@@ -6,7 +6,7 @@
 
 .qvplaceholder, .qvobject {
 	flex: 1 1 auto;
-	height: 300px;
+	height: 600px;
 	min-width: 400px;
 	margin: 45px 0 0 45px;
 }

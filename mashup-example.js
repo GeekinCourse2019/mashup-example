@@ -5,25 +5,38 @@
 /*
  *    Fill in host and port for Qlik engine
  */
-var prefix = window.location.pathname.substr( 0, window.location.pathname.toLowerCase().lastIndexOf( "/extensions" ) + 1 );
+var prefix = window.location.pathname.substr(0, window.location.pathname.toLowerCase().lastIndexOf("/extensions") + 1);
 var config = {
 	host: window.location.hostname,
 	prefix: prefix,
 	port: window.location.port,
 	isSecure: window.location.protocol === "https:"
 };
-require.config( {
-	baseUrl: ( config.isSecure ? "https://" : "http://" ) + config.host + (config.port ? ":" + config.port : "") + config.prefix + "resources"
-} );
+require.config({
+	baseUrl: (config.isSecure ? "https://" : "http://") + config.host + (config.port ? ":" + config.port : "") + config.prefix + "resources"
+});
 
-require( ["js/qlik"], function ( qlik ) {
-	qlik.setOnError( function ( error ) {
-		$( '#popupText' ).append( error.message + "<br>" );
-		$( '#popup' ).fadeIn( 1000 );
-	} );
-	$( "#closePopup" ).click( function () {
-		$( '#popup' ).hide();
-	} );
+require(["js/qlik"], function (qlik) {
+	qlik.setOnError(function (error) {
+		$('#popupText').append(error.message + "<br>");
+		$('#popup').fadeIn(1000);
+	});
+	$("#closePopup").click(function () {
+		$('#popup').hide();
+	});
+
+	//QRS calls
+	$.ajax({
+		method: 'GET',
+		headers: {
+			"user": "bohua.li",
+			"x-Qlik-Xrfkey": "1234567890abcdef"
+		},
+		url: "https://qlik.yudait.com/header/qrs/app/hublist?Xrfkey=1234567890abcdef",
+		success: function (response) {
+			console.log(response);
+		}
+	})
 
 	//callbacks -- inserted here --
 	//open apps -- inserted here --
@@ -32,31 +45,59 @@ require( ["js/qlik"], function ( qlik ) {
 	//get objects -- inserted here --
 	// app.getObject('QV03','akDGX');
 	// app.getObject('QV02','JcJvj');
-	app.getObject('CurrentSelections','CurrentSelections');
+	app.getObject('CurrentSelections', 'CurrentSelections');
 	//app.getObject('QV01','Ydsxt');
 
 	var chart1 = app.visualization.get('Ydsxt');
-	
-	chart1.then(function(vis){
+
+	chart1.then(function (vis) {
 		vis.show("QV01");
 
-		setTimeout(function(){
+		setTimeout(function () {
 			$("#page-container").css("opacity", 1);
 		}, 300);
-		
+
 	});
 
-	window.showChart = function(chart){
-		if(chart === 'chart1'){
-			app.getObject('QV01','Ydsxt');
+	window.showChart = function (chart) {
+		if (chart === 'chart1') {
+			app.getObject('QV01', 'Ydsxt');
 		}
 
-		if(chart === 'chart2'){
-	app.getObject('QV01','JcJvj');
+		if (chart === 'chart2') {
+			app.getObject('QV01', 'JcJvj');
 		}
 
-		if(chart === 'chart3'){
-			app.getObject('QV01','akDGX');
+		if (chart === 'chart3') {
+			app.getObject('QV01', 'akDGX');
+		}
+
+		if (chart === 'chart4') {
+			showSunburstChart();
+		}
+
+		if (chart === 'chart5') {
+			//var expression = "=pick(match([Product Group Desc], 'Deli', 'Eggs', 'Meat'), 100, 200, 350)";
+
+			app.visualization.create(
+				'barchart',
+				[
+					"Product Group Desc",
+					"=$(vProductValue)"
+				],
+				{
+					"showTitles": true,
+					"title": "Real time prices"
+				}
+			).then(function (vis) {
+				vis.show("QV01");
+			});
+
+
+			this.setInterval(function () {
+				window.setNumber();
+			}, 1000);
+
 		}
 
 		$(".nav-item").removeClass("active");
@@ -65,17 +106,29 @@ require( ["js/qlik"], function ( qlik ) {
 
 	//create cubes and lists -- inserted here --
 
+	window.setNumber = function () {
+		app.variable.setStringValue("vProductValue", "\"=pick(match([Product Group Desc], 'Deli', 'Eggs', 'Meat'), " + Math.random() * 1000 + ", " + Math.random() * 1000 + ", " + Math.random() * 1000 + ")\"");
+	};
+
+	window.getNumber = function () {
+		app.variable.getContent('vProductValue').then(function (model) {
+			console.log(model);
+		}, function (error) {
+			console.log(error);
+		});
+	};
+
 	var field = app.field('Product Sub Group Desc');
 	field.getData();
-	  
+
 	//bind data
-	function fieldListener(){
-		field.rows.forEach(function(fieldValue){
-			var option = $("<a class='dropdown-item'>"+fieldValue.qText+"</a>");
-			option.on("click", function(){
+	function fieldListener() {
+		field.rows.forEach(function (fieldValue) {
+			var option = $("<a class='dropdown-item'>" + fieldValue.qText + "</a>");
+			option.on("click", function () {
 				selectProduct(fieldValue.qText);
 			});
-			
+
 			$("#product-dropdown").append(option);
 		});
 
@@ -83,102 +136,101 @@ require( ["js/qlik"], function ( qlik ) {
 	}
 
 	field.OnData.bind(fieldListener);
-	
-	window.selectProduct = function(param){
+
+	window.selectProduct = function (param) {
 		app.field("Product Sub Group Desc").selectValues([param], false, true);
 
 		$("#dropdownMenuButton").text(param);
 	};
 
+	function showSunburstChart() {
+		app.createCube({
+			qDimensions: [{
+				qDef: {
+					qFieldDefs: ["Product Group Desc"]
+				}
+			}, {
+				qDef: {
+					qFieldDefs: ["Product Sub Group Desc"]
+				}
+			}],
+			qMeasures: [{
+				qDef: {
+					qDef: "Sum ([Sales Amount])"
+				}
+			}],
+			qInitialDataFetch: [{
+				qTop: 0,
+				qLeft: 0,
+				qHeight: 20,
+				qWidth: 3
+			}]
+		}, function (reply) {
+			var data = [];
+			reply.qHyperCube.qDataPages[0].qMatrix.forEach(function (qRow) {
+				var found;
+				data.forEach(function (item) {
+					if (item.name === qRow[0].qText) {
+						found = item;
+					}
+				});
 
-	
+				if (found) {
+					found.children.push({
+						name: qRow[1].qText,
+						value: qRow[2].qNum
+					});
+				} else {
+					var newProduct = {
+						name: qRow[0].qText,
+						children: [{
+							name: qRow[1].qText,
+							value: qRow[2].qNum
+						}]
+					};
 
-	app.createCube({
-		qDimensions : [{
-			qDef : {
-				qFieldDefs : ["Product Group Desc"]
-			}
-		},{
-			qDef : {
-				qFieldDefs : ["Product Sub Group Desc"]
-			}
-		}],
-		qMeasures : [{
-			qDef : {
-				qDef : "Sum ([Sales Amount])"
-			}
-		}],
-		qInitialDataFetch : [{
-			qTop : 0,
-			qLeft : 0,
-			qHeight : 20,
-			qWidth : 3
-		}]
-	}, function(reply) {
-		var data = [];
-		reply.qHyperCube.qDataPages[0].qMatrix.forEach(function(qRow){
-			var found;
-			data.forEach(function(item){
-				if(item.name === qRow[0].qText){
-					found = item;
+					data.push(newProduct);
 				}
 			});
 
-			if(found){
-				found.children.push({
-					name: qRow[1].qText,
-					value: qRow[2].qNum
-				});
-			}else{
-				var newProduct = {
-					name: qRow[0].qText,
-					children: [{
-						name: qRow[1].qText,
-						value: qRow[2].qNum
-					}]
-				};
-
-				data.push(newProduct);
-			}
-		});
-
-		option = {
-			title: {
-				text: 'Product Sales',
-				textStyle: {
-					fontSize: 14,
-					align: 'center'
-				},
-				subtextStyle: {
-					align: 'center'
-				}
-			},
-			series: {
-				type: 'sunburst',
-				highlightPolicy: 'ancestor',
-				data: data,
-				radius: [0, '95%'],
-				sort: null,
-				levels: [{}, {
-					r0: '15%',
-					r: '35%',
-					itemStyle: {
-						borderWidth: 2
+			option = {
+				title: {
+					text: 'Product Sales',
+					textStyle: {
+						fontSize: 14,
+						align: 'center'
 					},
-					label: {
-						rotate: 'tangential'
+					subtextStyle: {
+						align: 'center'
 					}
-				}, {
-					r0: '35%',
-					r: '70%',
-					label: {
-						align: 'right'
-					}
-				}]
-			}
-		};
+				},
+				series: {
+					type: 'sunburst',
+					highlightPolicy: 'ancestor',
+					data: data,
+					radius: [0, '95%'],
+					sort: null,
+					levels: [{}, {
+						r0: '15%',
+						r: '35%',
+						itemStyle: {
+							borderWidth: 2
+						},
+						label: {
+							rotate: 'tangential'
+						}
+					}, {
+						r0: '35%',
+						r: '70%',
+						label: {
+							align: 'right'
+						}
+					}]
+				}
+			};
 
-		var myChart = echarts.init(document.getElementById('hypercube-chart'));
-		myChart.setOption(option);
-	});
-} );
+			var myChart = echarts.init(document.getElementById('QV01'));
+			myChart.setOption(option);
+		});
+	}
+});
